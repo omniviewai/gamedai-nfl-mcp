@@ -41,6 +41,31 @@ def latest_complete_nfl_season(today: date | None = None) -> int:
     return current.year - 1 if current.month >= 3 else current.year - 2
 
 
+def current_nfl_league_year(today: date | None = None) -> int:
+    """Return the CURRENT NFL league year from the calendar clock.
+
+    Start/sit is a decision about the upcoming slate, so its season default is
+    the league year (projections load for it), not the stats season: on
+    2026-08-30 that is 2026, while grades default to 2025 (complete stats).
+    A league year spans Mar..Feb, so Jan/Feb still belong to the prior year.
+    """
+    current = today or date.today()
+    return current.year if current.month >= 3 else current.year - 1
+
+
+def _with_request_context(result: ToolResult, **requested: Any) -> ToolResult:
+    """Attach what the backend was asked for, as `requested_*` keys.
+
+    These are the query, not the source. The backend's own `source_*` fields
+    (rankings) and `stats_season` (grades) say what was served; when the
+    backend does not say, the source context stays unknown rather than being
+    copied from the request.
+    """
+    if "code" in result and "http_status" in result:
+        return result
+    return {**{f"requested_{key}": value for key, value in requested.items()}, **result}
+
+
 def _tool_error(exc: Any) -> ToolResult:
     return exc.as_dict()
 
@@ -127,13 +152,9 @@ def build_mcp_server(*, host: str = "127.0.0.1", port: int = 8080) -> Any:
         week: int | None = None,
     ) -> ToolResult:
         """Return a public Scout player grade."""
-        effective_season = (
-            season if season is not None else latest_complete_nfl_season()
-        )
+        effective_season = season if season is not None else latest_complete_nfl_season()
         async with GamedaiClient() as client:
-            return await _call_tool(
-                lambda: client.player_grade(player, effective_season, week)
-            )
+            return await _call_tool(lambda: client.player_grade(player, effective_season, week))
 
     @mcp.tool(annotations=annotations)
     async def get_start_sit_recommendation(
@@ -143,13 +164,12 @@ def build_mcp_server(*, host: str = "127.0.0.1", port: int = 8080) -> Any:
         season: int | None = None,
     ) -> ToolResult:
         """Return a public Scout start/sit comparison."""
-        effective_season = (
-            season if season is not None else latest_complete_nfl_season()
-        )
+        effective_season = season if season is not None else current_nfl_league_year()
         async with GamedaiClient() as client:
-            return await _call_tool(
+            result = await _call_tool(
                 lambda: client.start_sit(player_a, player_b, effective_season, week)
             )
+        return _with_request_context(result, season=effective_season, week=week)
 
     @mcp.tool(annotations=annotations)
     async def get_scout_rankings(
@@ -157,15 +177,21 @@ def build_mcp_server(*, host: str = "127.0.0.1", port: int = 8080) -> Any:
         scoring: str = "PPR",
         week: int | None = None,
     ) -> ToolResult:
-        """Return the public Scout rankings board."""
+        """Return the public Scout rankings board (FantasyPros consensus).
+
+        Omit `week` for the source's current week. `requested_week` echoes the
+        query; `source_season`/`source_week` come from the backend and stay
+        null when the source did not say.
+        """
         async with GamedaiClient() as client:
-            return await _call_tool(
+            result = await _call_tool(
                 lambda: client.rankings(
                     position=position,
                     scoring=scoring,
                     week=week,
                 )
             )
+        return _with_request_context(result, week=week)
 
     return mcp
 

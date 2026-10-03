@@ -7,12 +7,23 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import pytest
 
 from gamedai_mcp.client import GamedaiClient
 from gamedai_mcp.server import TOOL_TARGETS
 
 
-CONTRACT = Path(__file__).resolve().parents[3] / "backend/openapi/scout_public_contract.openapi.json"
+CONTRACT = (
+    Path(__file__).resolve().parents[3] / "backend/openapi/scout_public_contract.openapi.json"
+)
+
+# The contract is generated from the FastAPI routes in the monorepo
+# (scripts/mcp/generate_public_contract.py). The standalone mirror at
+# github.com/omniviewai/gamedai-nfl-mcp has no backend/ beside it, so these
+# tests skip there instead of failing on a missing file.
+requires_contract = pytest.mark.skipif(
+    not CONTRACT.exists(), reason=f"public Scout contract not present at {CONTRACT}"
+)
 
 
 def _operation(contract: dict[str, Any], path: str) -> dict[str, Any]:
@@ -25,9 +36,7 @@ class CapturedAsyncClient:
 
     async def request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         self.requests.append((method, url, kwargs))
-        payload: dict[str, Any] = (
-            {"games": []} if url.endswith("/v1/games/slate") else {"ok": True}
-        )
+        payload: dict[str, Any] = {"games": []} if url.endswith("/v1/games/slate") else {"ok": True}
         return httpx.Response(
             200,
             json=payload,
@@ -63,6 +72,7 @@ def _minimal_required_kwargs(method: Any) -> dict[str, str | int]:
     }
 
 
+@requires_contract
 def test_client_sends_all_contract_required_query_parameters() -> None:
     contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
     captured = CapturedAsyncClient()
@@ -98,6 +108,7 @@ def test_client_sends_all_contract_required_query_parameters() -> None:
         assert required_parameters <= sent_params, tool_name
 
 
+@requires_contract
 def test_start_sit_recommendation_is_nullable_in_the_generated_contract() -> None:
     schema = contract_schema("StartSitResponse")
     recommendation = schema["properties"]["recommendation"]

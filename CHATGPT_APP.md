@@ -12,7 +12,7 @@ There is no OpenAPI upload. The MCP server advertises its tools directly:
 - `get_start_sit_recommendation(player_a, player_b, week, season?)`
 - `get_scout_rankings(position?, scoring?, week?)`
 
-The server defaults an omitted `season` to the latest complete NFL stats season
+An omitted `season` defaults to the latest complete stats season for grades, and to the current league year for start/sit
 for player grades and start/sit, using the calendar rule documented in
 `README.md`. Rankings derive their source season in the backend. It sends the
 optional Scout key only on Scout API calls.

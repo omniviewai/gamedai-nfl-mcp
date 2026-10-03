@@ -28,8 +28,9 @@ python -m pip install -e ".[test]"
 - `get_scout_rankings(position?, scoring?, week?)` reads the Scout rankings
   board.
 
-When `season` is omitted, `get_player_grade` and
-`get_start_sit_recommendation` use the latest complete NFL stats season:
+When `season` is omitted, `get_player_grade` uses the latest complete NFL
+stats season, and `get_start_sit_recommendation` uses the CURRENT league year
+(projections load for the upcoming slate):
 `today.year - 1` when the month is March or later, otherwise `today.year - 2`.
 An explicit season always wins. Rankings derive their source season in the
 backend.
